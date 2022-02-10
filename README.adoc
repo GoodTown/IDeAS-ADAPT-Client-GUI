@@ -1,0 +1,29 @@
+= ADAPT GUI
+
+== Installation
+
+Use `setup.py` to install the ADAPT GUI:
+
+```sh
+[...]$ cd path/to/adapt-gui
+[adapt-gui]$ pip install .
+```
+
+To install in "development mode" (which will allow the `adapt-gui` script to see
+your changes to the `adapted` module without manually-reinstalling), add the
+`-e` flag to `pip`:
+
+```sh
+[...]$ cd path/to/adapt-gui
+[adapt-gui]$ pip install -e .
+```
+
+
+== Run-time dependencies
+
+This program assumes that
+https://bigchaindb.readthedocs.io/en/latest/installation/node-setup/all-in-one-bigchaindb.html[BigchainDB is running]
+and that the `upss-fuse` binary is available in your `PATH`
+(e.g., via `cargo install --release` within the UPSS-FUSE project) and that the
+https://github.com/libfuse/libfuse#supported-platforms[FUSE library]
+is available.

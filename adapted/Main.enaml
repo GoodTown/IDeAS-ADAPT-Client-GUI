@@ -1,0 +1,303 @@
+#   Copyright 2021 Jonathan Anderson
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+import base64
+import yaml
+
+from enaml.image import Image
+from enaml.layout.api import (hbox, vbox, spacer)
+from enaml.widgets.api import (
+    Action,
+    ActionGroup,
+    CheckBox,
+    Container,
+    Field,
+    FileDialogEx,
+    Form,
+    GroupBox,
+    ImageView,
+    Label,
+    MainWindow,
+    Menu,
+    MenuBar,
+    MultilineField,
+    PushButton,
+    ToolBar,
+)
+
+from enaml.stdlib.message_box import critical
+
+from . import icons
+
+
+enamldef FileActions(ActionGroup):
+    attr main : MainWindow
+
+    Action:
+        text = 'Load &configuration'
+        icon = icons.load('configure')
+        triggered :: main.load_configuration(main.update_system_config)
+
+    Action:
+        text = '&Login\tCtrl+L'
+        icon = icons.load('preferences-contact-list')
+        triggered :: main.load_configuration(main.update_user)
+
+    Action:
+        text = 'Open ADAPT &transaction\tCtrl+O'
+        icon = icons.load('document-edit-decrypt-verify')
+        triggered :: main.load_configuration(main.update_tx_data)
+
+    Action:
+        text = 'Quit\tCtrl+Q'
+        icon = icons.load('application-exit')
+        enabled << len(mount.mount_point) == 0
+        triggered :: main.close()
+
+
+enamldef Main(MainWindow): main:
+    title = "ADAPT Transaction"
+
+    attr user_auth
+    attr bdb
+    attr mount
+    attr console_text
+
+    event check_out_bp
+
+    attr show_advanced = False
+
+
+    func load_configuration(fn):
+        """Load YAML data from a file and pass it to function fn.
+        """
+
+        try:
+            path = FileDialogEx.get_open_file_name()
+            if path:
+                with open(path, 'r') as f:
+                    fn(yaml.load(f, Loader=yaml.Loader))
+
+        except Exception as e:
+            critical(main, f'Error loading {path}', str(e))
+
+
+    func update_system_config(data):
+        root_url.text = data['bigchaindb']['url']
+        store.text = data['upss']['block_store']
+
+
+    func update_user(data):
+        pub.text = data['pub']
+        priv.text = data['priv']
+        user_image.image = Image(data=base64.b64decode(data['image']))
+
+
+    func update_tx_data(data):
+        base_height.text = str(data['block'])
+
+
+    MenuBar:
+        Menu:
+            title = '&File'
+            FileActions:
+                main = main
+
+    ToolBar:
+        FileActions:
+            main = main
+
+    ToolBar:
+        CheckBox:
+            checkable = True
+            text = "Advanced"
+            checked := show_advanced
+
+    Container:
+        constraints << [
+            (vbox(sys, base, mount_details, new_trans, cons)
+                if show_advanced
+                else vbox(base, new_trans))
+        ]
+        GroupBox: sys:
+            title = "Login"
+            enabled << len(bdb.url) > 0
+
+            Container:
+                enabled << len(mount.mount_point) == 0
+
+                Form:
+                    Label:
+                        text = "Username"
+
+                    Field: username:
+                        placeholder = "Email"
+                        text := user_auth.username
+
+                    Label:
+                        text = "Password"
+
+                    Field: password:
+                        placeholder = "Password"
+                        text := user_auth.password
+                        submit_triggers = ['lost_focus', 'return_pressed']
+                    
+                    Container: mnt_buttons:
+
+                        PushButton: login:
+                            text = "Login"
+                            clicked :: user_auth.sign_in(username.text,password.text)
+
+                        PushButton: newuser:
+                            text = "Create Account"
+                            clicked :: user_auth.new_user(username.text,password.text)
+
+        GroupBox: sys:
+            title = "System parameters"
+            visible << show_advanced
+
+            Container:
+                enabled << len(mount.mount_point) == 0
+
+                Form:
+                    Label:
+                        text = "BigchainDB"
+
+                    Field: root_url:
+                        placeholder = "BigchainDB URL"
+                        text := bdb.url
+
+                    Label:
+                        text = "Block store"
+
+                    Field: store:
+                        placeholder = "/path/to/upss.store"
+                        text := mount.store
+                        submit_triggers = ['lost_focus', 'return_pressed']
+
+        GroupBox: base:
+            title = "Base transaction"
+            enabled << len(bdb.url) > 0
+
+            Container:
+                Form:
+                    Label:
+                        text = "Block"
+
+                    Field: base_height:
+                        placeholder = "Block height"
+                        text ::
+                            bp.text = bdb.fetch_bp(change['value'])
+
+                    Label:
+                        text = "Block pointer"
+
+                    Field: bp:
+                        placeholder = "QlABQiIAAAAAAAABjg..."
+                        text := mount.base_pointer
+                        submit_triggers = ['lost_focus', 'return_pressed']
+
+                PushButton:
+                    text = "Mount"
+                    clicked ::
+                        try:
+                            mount.mount(bp.field_text(), store.field_text())
+                        except Exception as e:
+                            critical(main, 'Error', f'Failed to mount: {e}')
+
+        GroupBox: mount_details:
+            title = "Mount point"
+            visible << show_advanced
+
+            Container:
+                constraints = [vbox(mnt, mnt_buttons)]
+                enabled << len(mount.mount_point) != 0
+
+                Field: mnt:
+                    read_only = True
+                    text << mount.mount_point or "Not mounted"
+
+                Container: mnt_buttons:
+                    constraints = [hbox(spacer, op, unmount)]
+
+                    PushButton: op:
+                        text = "Open"
+                        clicked :: mount.open_mounted_directory()
+
+                    PushButton: unmount:
+                        text = "Unmount"
+                        clicked :: mount.unmount()
+
+        GroupBox: new_trans:
+            title = "New transaction"
+            enabled << len(bdb.url) > 0 and len(new_pointer.text) > 0
+
+            Container:
+                constraints = [
+                    vbox(hbox(tx_details, user_image), desc, commit),
+                    user_image.height <= tx_details.height,
+                ]
+
+                Form: tx_details:
+                    Label:
+                        text = "Block pointer"
+
+                    Field: new_pointer:
+                        placeholder = "QlABQiIAAAAAAAABjg..."
+                        text := mount.new_pointer
+
+                    Container:
+                        visible << show_advanced
+                        Form:
+                            Label:
+                                text = "Public key"
+
+                            Field: pub:
+                                placeholder = "Decoded Ed25519 public key"
+
+                            Label:
+                                text = "Private key"
+
+                            Field: priv:
+                                placeholder = "Decoded Ed25519 private key"
+
+                ImageView: user_image:
+                    scale_to_fit = True
+                    preserve_aspect_ratio = True
+
+                Form: desc:
+                    Label:
+                        text = "Description"
+
+                    MultilineField: descrip:
+                        text = ""
+
+                PushButton: commit:
+                    text = "Commit"
+                    enabled << len(descrip.text) > 0
+                    clicked::
+                        bdb.commit(new_pointer.text,
+                                   base_height.text,
+                                   pub.text,
+                                   priv.text)
+
+        GroupBox: cons:
+            title = "Console"
+            name = "console"
+            visible << show_advanced
+
+            Container:
+                MultilineField:
+                    read_only = True
+                    text << console_text.text

@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+
+#   Copyright 2021 Jonathan Anderson
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+import base64
+import datetime
+import email
+import enaml
+import os
+import platform
+import subprocess
+import tempfile
+import threading
+import requests
+
+from atom.api import Atom, Str, observe
+from bigchaindb_driver import BigchainDB
+from enaml.application import deferred_call
+
+
+class Console(Atom):
+    """A place to hold textual messages.
+    """
+
+    text = Str()
+
+
+class BDB(Atom):
+    url = Str()
+
+    def commit(self, bp, prev_block, pub, priv):
+        data = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'bp': bp,
+            'prev': int(prev_block),
+        }
+
+        try:
+            bdb = BigchainDB(self.url)
+
+            t = bdb.transactions.prepare(operation='CREATE',
+                                         signers=pub,
+                                         asset={'data': data})
+
+            done = bdb.transactions.fulfill(t, priv)
+            result = bdb.transactions.send_commit(done)
+            print(result)
+
+        except Exception as e:
+            log(f'Error committing transaction: {e}')
+            raise
+
+
+    def fetch_bp(self, height):
+        try:
+            block = BigchainDB(self.url).blocks.retrieve(str(height))
+            txns = block['transactions']
+            assert len(txns) == 1
+
+            return txns[0]['asset']['data']['bp']
+
+        except Exception as e:
+            log(f'Error retrieving BP from block {height}: {e}')
+            return ''
+
+
+class MountDetails(Atom):
+    """Information about a mount point.
+    """
+
+    base_pointer = Str()
+    new_pointer = Str()
+    store = Str()
+    mount_point = Str()
+
+
+    @observe('base_pointer', 'store')
+    def details_changed(self, change):
+        if len(self.base_pointer) == 0 or len(self.store) == 0:
+            return
+
+        try:
+            self.mount()
+        except Exception as e:
+            log('Error: ' + str(e))
+
+
+    def mount(self, bp=None, store=None):
+        """When the the block pointer and/or store change, we may want to mount.
+        """
+
+        assert len(self.mount_point) == 0
+
+        if not bp:
+            bp = self.base_pointer
+
+        if not store:
+            store = self.store
+
+        if not bp:
+            raise ValueError("No block pointer specified")
+
+        if not store:
+            raise ValueError("No block store specified")
+
+        log(f"Mounting block pointer '{bp}'")
+
+        #
+        # Construct temporary metadata file and mount point
+        #
+        meta, filename = tempfile.mkstemp(prefix='upss', suffix='.meta')
+        os.fdopen(meta, 'wb').write(base64.b64decode(bp))
+        log(f'Block pointer written to {filename}')
+
+        d = tempfile.mkdtemp(prefix='upss', suffix='.mnt')
+        log(f'Mount point: {d}')
+
+        #
+        # Call upss-fuse to mount the directory
+        #
+        cmd = ['upss-fuse',
+               '--mount', d,
+               '--root-meta', filename,
+               '--store', store,
+               'local',
+               '--cache', 'true']
+
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+
+        #
+        # Start monitoring upss-fuse process.
+        #
+        # Give ourselves a little time to check for early errors (e.g., OS
+        # file permission errors) without giving the appearence of success.
+        #
+        try:
+            outs, _ = p.communicate(timeout=.1)
+            log(outs.decode('ascii', 'backslashreplace'))
+
+        except subprocess.TimeoutExpired:
+            pass
+
+        # Start a long-term thread to watch the `upss-fuse` process.
+        if p.returncode is None:
+            self.mount_point = d
+            threading.Thread(target=self.monitor_mount, args=(p, filename)).start()
+            self.open_mounted_directory()
+
+
+    def monitor_mount(self, p, meta_file):
+        """Watch the upss-fuse process for completion/unmount.
+        """
+
+        while True:
+            try:
+                outs, _ = p.communicate(timeout=1)
+
+                # Use thread-safe signalling mechanism
+                deferred_call(log, outs.decode('ascii', 'backslashreplace'))
+                deferred_call(setattr, self, 'mount_point', '')
+
+                new_pointer = base64.b64encode(open(meta_file, 'rb').read())
+                deferred_call(setattr, self, 'new_pointer', new_pointer)
+
+                break
+
+            except subprocess.TimeoutExpired:
+                pass
+
+
+    def open_mounted_directory(self):
+        """Open the mount point in Finder / Explorer / etc.
+        """
+
+        if len(self.mount_point) == 0:
+            return
+
+        if platform.system() == "Windows":
+            os.startfile(self.mount_point)
+        elif platform.system() == "Darwin":
+            subprocess.run(["open", self.mount_point])
+        else:
+            subprocess.Popen(["xdg-open", self.mount_point])
+
+
+    def unmount(self):
+        """Unmount the filesystem.
+        """
+
+        if len(self.mount_point) > 0:
+            subprocess.run(['umount', self.mount_point])
+            os.rmdir(self.mount_point)
+
+
+
+
+class UserAuthentication(Atom):
+
+
+    apikey='AIzaSyDtpDief37bbxBATCc9BUZmDuZXku1dpTg'# the web api key
+    email = str()
+    password = str()
+    def new_user(email,password):
+        details={
+            'email':email,
+            'password':password,
+           'returnSecureToken': True
+        }
+        # send post request
+        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={}'.format(apikey),data=details)
+        #check for errors in result
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        #if the registration succeeded
+        if 'idToken' in r.json().keys() :
+            return {'status':'success','idToken':r.json()['idToken']}
+
+    def sign_in(email,password):
+        details={
+            'email':email,
+            'password':password,
+            'returnSecureToken': True
+        }
+        #Post request
+        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={}'.format(apikey),data=details)
+        #check for errors
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        #success
+        if 'idToken' in r.json().keys() :
+            return {'status':'success','idToken':r.json()['idToken']}
+    
+
+    def VerifyEmail(idToken):
+        headers = {
+            'Content-Type': 'application/json',
+        }
+        data='{"requestType":"VERIFY_EMAIL","idToken":"'+idToken+'"}'
+        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={}'.format(apikey), headers=headers, data=data)
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        if 'email' in r.json().keys():
+            return {'status':'success','email':r.json()['email']}
+
+    def SendResetEmail(email):
+        headers = {
+            'Content-Type': 'application/json',
+        }   
+        data={"requestType":"PASSWORD_RESET","email":email}
+        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={}'.format(apikey), data=data)
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        if 'email' in r.json().keys():
+            return {'status':'success','email':r.json()['email']}
+
+    def SignInAnonymously():
+        headers = {
+            'Content-Type': 'application/json',
+        }
+        data='{"returnSecureToken":"true"}'
+        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={}'.format(apikey), headers=headers, data=data)
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        if 'idToken' in r.json().keys():
+            return {'status':'success','idToken':r.json()['idToken']}
+
+    def GetData(idToken):
+        details={
+            'idToken':idToken
+        }
+        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={}'.format(apikey),data=details)
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+        if 'users' in r.json():
+            return {'status':'success','data':r.json()['users']}
+
+    def DeleteAccount(idToken):
+        details={
+            'idToken':idToken
+        }
+        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:delete?key={}'.format(apikey),data=details)
+        if 'error' in r.json().keys():
+            return {'status':'error','message':r.json()['error']['message']}
+    
+        return {'status':'success','data':r.json()}
+
+console = Console()
+
+def log(s):
+    console.text += str(s)
+    console.text += '\n'
+
+if __name__ == '__main__':
+    with enaml.imports():
+        from adapted.Main import Main
+
+    from enaml.qt.qt_application import QtApplication
+    app = QtApplication()
+
+    bdb = BDB()
+    mnt = MountDetails()
+    user = UserAuthentication()
+    view = Main(bdb=bdb, console_text=console, mount=mnt,user_auth=user)
+    view.show()
+
+    app.start()
