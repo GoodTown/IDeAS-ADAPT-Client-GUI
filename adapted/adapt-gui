@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 import threading
 import requests
+import firebase_authentication_api
 
 from atom.api import Atom, Str, observe
 from bigchaindb_driver import BigchainDB
@@ -205,98 +206,27 @@ class MountDetails(Atom):
             subprocess.run(['umount', self.mount_point])
             os.rmdir(self.mount_point)
 
-
-
-
 class UserAuthentication(Atom):
+    email = Str()
+    password = Str()
 
-
-    apikey='AIzaSyDtpDief37bbxBATCc9BUZmDuZXku1dpTg'# the web api key
-    email = str()
-    password = str()
-    def new_user(email,password):
-        details={
-            'email':email,
-            'password':password,
-           'returnSecureToken': True
-        }
-        # send post request
-        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={}'.format(apikey),data=details)
-        #check for errors in result
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        #if the registration succeeded
-        if 'idToken' in r.json().keys() :
-            return {'status':'success','idToken':r.json()['idToken']}
-
-    def sign_in(email,password):
-        details={
-            'email':email,
-            'password':password,
-            'returnSecureToken': True
-        }
-        #Post request
-        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={}'.format(apikey),data=details)
-        #check for errors
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        #success
-        if 'idToken' in r.json().keys() :
-            return {'status':'success','idToken':r.json()['idToken']}
+    def new_user(self):
+        if (self.email == "" and self.password == ""):
+            result = "Please enter username and password"
+        else:
+            result = firebase_authentication_api.new_user(self.email,self.password)
+        
+        log(result)
     
+    def sign_in(self):
+        if (self.email == "" and self.password == ""):
+            result = "Please enter username and password"    
+        else:
+            result = firebase_authentication_api.sign_in(self.email,self.password)
+        log(result)
 
-    def VerifyEmail(idToken):
-        headers = {
-            'Content-Type': 'application/json',
-        }
-        data='{"requestType":"VERIFY_EMAIL","idToken":"'+idToken+'"}'
-        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={}'.format(apikey), headers=headers, data=data)
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        if 'email' in r.json().keys():
-            return {'status':'success','email':r.json()['email']}
 
-    def SendResetEmail(email):
-        headers = {
-            'Content-Type': 'application/json',
-        }   
-        data={"requestType":"PASSWORD_RESET","email":email}
-        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key={}'.format(apikey), data=data)
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        if 'email' in r.json().keys():
-            return {'status':'success','email':r.json()['email']}
 
-    def SignInAnonymously():
-        headers = {
-            'Content-Type': 'application/json',
-        }
-        data='{"returnSecureToken":"true"}'
-        r = requests.post('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={}'.format(apikey), headers=headers, data=data)
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        if 'idToken' in r.json().keys():
-            return {'status':'success','idToken':r.json()['idToken']}
-
-    def GetData(idToken):
-        details={
-            'idToken':idToken
-        }
-        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={}'.format(apikey),data=details)
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-        if 'users' in r.json():
-            return {'status':'success','data':r.json()['users']}
-
-    def DeleteAccount(idToken):
-        details={
-            'idToken':idToken
-        }
-        r=requests.post('https://identitytoolkit.googleapis.com/v1/accounts:delete?key={}'.format(apikey),data=details)
-        if 'error' in r.json().keys():
-            return {'status':'error','message':r.json()['error']['message']}
-    
-        return {'status':'success','data':r.json()}
 
 console = Console()
 
@@ -306,7 +236,8 @@ def log(s):
 
 if __name__ == '__main__':
     with enaml.imports():
-        from adapted.Main import Main
+        from login_view import lLoginView
+        #from main_view import Main
 
     from enaml.qt.qt_application import QtApplication
     app = QtApplication()
@@ -314,7 +245,8 @@ if __name__ == '__main__':
     bdb = BDB()
     mnt = MountDetails()
     user = UserAuthentication()
-    view = Main(bdb=bdb, console_text=console, mount=mnt,user_auth=user)
+    
+    view = Main(user_auth=user, bdb=bdb, console_text=console, mount=mnt)
     view.show()
 
     app.start()

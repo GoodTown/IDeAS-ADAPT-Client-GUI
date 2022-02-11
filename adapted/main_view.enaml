@@ -16,7 +16,7 @@ import base64
 import yaml
 
 from enaml.image import Image
-from enaml.layout.api import (hbox, vbox, spacer)
+from enaml.layout.api import (hbox, vbox, spacer, align)
 from enaml.widgets.api import (
     Action,
     ActionGroup,
@@ -38,7 +38,7 @@ from enaml.widgets.api import (
 
 from enaml.stdlib.message_box import critical
 
-from . import icons
+import icons
 
 
 enamldef FileActions(ActionGroup):
@@ -125,17 +125,16 @@ enamldef Main(MainWindow): main:
             checked := show_advanced
 
     Container:
-        constraints << [
-            (vbox(sys, base, mount_details, new_trans, cons)
-                if show_advanced
-                else vbox(base, new_trans))
-        ]
-        GroupBox: sys:
+        constraints << [vbox(log, cons)] #sys, base, mount_details, new_trans
+            #if show_advanced
+            #    else vbox(base, new_trans))
+        #]
+        GroupBox: log:
             title = "Login"
-            enabled << len(bdb.url) > 0
+            #visible << show_advanced
 
             Container:
-                enabled << len(mount.mount_point) == 0
+                #enabled << len(mount.mount_point) == 0
 
                 Form:
                     Label:
@@ -143,7 +142,7 @@ enamldef Main(MainWindow): main:
 
                     Field: username:
                         placeholder = "Email"
-                        text := user_auth.username
+                        text := user_auth.email
 
                     Label:
                         text = "Password"
@@ -153,22 +152,22 @@ enamldef Main(MainWindow): main:
                         text := user_auth.password
                         submit_triggers = ['lost_focus', 'return_pressed']
                     
-                    Container: mnt_buttons:
+                    Container: log_buttons:
 
                         PushButton: login:
                             text = "Login"
-                            clicked :: user_auth.sign_in(username.text,password.text)
+                            clicked :: user_auth.sign_in()
 
                         PushButton: newuser:
                             text = "Create Account"
-                            clicked :: user_auth.new_user(username.text,password.text)
+                            clicked :: user_auth.new_user()
 
         GroupBox: sys:
             title = "System parameters"
-            visible << show_advanced
+            visible = False
 
             Container:
-                enabled << len(mount.mount_point) == 0
+                #enabled << len(mount.mount_point) == 0
 
                 Form:
                     Label:
@@ -188,8 +187,8 @@ enamldef Main(MainWindow): main:
 
         GroupBox: base:
             title = "Base transaction"
-            enabled << len(bdb.url) > 0
-
+            #enabled << len(bdb.url) > 0
+            visible = False
             Container:
                 Form:
                     Label:
@@ -218,11 +217,11 @@ enamldef Main(MainWindow): main:
 
         GroupBox: mount_details:
             title = "Mount point"
-            visible << show_advanced
+            visible = False
 
             Container:
                 constraints = [vbox(mnt, mnt_buttons)]
-                enabled << len(mount.mount_point) != 0
+                #enabled << len(mount.mount_point) != 0
 
                 Field: mnt:
                     read_only = True
@@ -241,13 +240,13 @@ enamldef Main(MainWindow): main:
 
         GroupBox: new_trans:
             title = "New transaction"
-            enabled << len(bdb.url) > 0 and len(new_pointer.text) > 0
-
+            #enabled << len(bdb.url) > 0 and len(new_pointer.text) > 0
+            visible = False
             Container:
-                constraints = [
-                    vbox(hbox(tx_details, user_image), desc, commit),
-                    user_image.height <= tx_details.height,
-                ]
+                #constraints = [
+                #    vbox(hbox(tx_details, user_image), desc, commit),
+                #    user_image.height <= tx_details.height,
+                #]
 
                 Form: tx_details:
                     Label:
@@ -295,7 +294,7 @@ enamldef Main(MainWindow): main:
         GroupBox: cons:
             title = "Console"
             name = "console"
-            visible << show_advanced
+            #visible << show_advanced
 
             Container:
                 MultilineField:

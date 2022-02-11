@@ -1,0 +1,35 @@
+
+from enaml.layout.api import (hbox, vbox, spacer, align)
+from enaml.widgets.api import (
+    CheckBox,
+    Container,
+    Field,
+    Label,
+    PushButton,
+)
+enamldef LoginForm(Form):
+    attr user_auth
+    Label:
+        text = "Username"
+
+    Field: username:
+        placeholder = "Email"
+        text := user_auth.email
+
+    Label:
+        text = "Password"
+
+    Field: password:
+        placeholder = "Password"
+        text := user_auth.password
+        submit_triggers = ['lost_focus', 'return_pressed']
+                    
+    Container: log_buttons:
+
+        PushButton: login:
+            text = "Login"
+            clicked :: user_auth.sign_in()
+
+        PushButton: newuser:
+            text = "Create Account"
+            clicked :: user_auth.new_user()
