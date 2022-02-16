@@ -16,7 +16,7 @@ import base64
 import yaml
 
 from enaml.image import Image
-from enaml.layout.api import (hbox, vbox, spacer, align,vertical, horizontal)
+from enaml.layout.api import (hbox, vbox, spacer)
 from enaml.widgets.api import (
     Action,
     ActionGroup,
@@ -34,7 +34,6 @@ from enaml.widgets.api import (
     MultilineField,
     PushButton,
     ToolBar,
-    Window
 )
 
 from enaml.stdlib.message_box import critical
@@ -67,25 +66,20 @@ enamldef FileActions(ActionGroup):
         triggered :: main.close()
 
 
-enamldef ADAPTForm(MainWindow):
+enamldef ADAPTForm(MainWindow): main:
     title = "ADAPT Transaction"
 
-    attr user_auth
     attr bdb
     attr mount
     attr console_text
-
     event check_out_bp
 
     attr show_advanced = False
 
-    func sign_in_clicked():
-        user_auth.sign_in()
-
 
     func load_configuration(fn):
-        #Load YAML data from a file and pass it to function fn.
-        
+        """Load YAML data from a file and pass it to function fn.
+        """
 
         try:
             path = FileDialogEx.get_open_file_name()
@@ -128,51 +122,13 @@ enamldef ADAPTForm(MainWindow):
             text = "Advanced"
             checked := show_advanced
 
-    #title << "ADAPT login page"
-    Container:
-        GroupBox: login_box:
-            share_layout = True
-            title = "Login Details"
-            Container: 
-                event sign_in_clicked
-                Label: 
-                    text << user_auth.result
-                Form:
-                    Label:
-                        text = "Username"
-
-                    Field: username:
-                        placeholder = "Email"
-                        text := user_auth.email
-
-                    Label:
-                        text = "Password"
-
-                    Field: password:
-                        placeholder = "Password"
-                        text := user_auth.password
-                        submit_triggers = ['lost_focus', 'return_pressed']
-                    
-                Container: log_buttons:
-
-                    PushButton: login:
-                        text = "Login"
-                        clicked :: sign_in_clicked()
-
-                    PushButton: newuser:
-                        text = "Create Account"
-                        clicked :: user_auth.new_user()
-                Container:
-                    MultilineField:
-                        read_only = True
-                        text << console_text.text
     Container:
         constraints << [
             (vbox(sys, base, mount_details, new_trans, cons)
                 if show_advanced
                 else vbox(base, new_trans))
         ]
-        visible << False
+
         GroupBox: sys:
             title = "System parameters"
             visible << show_advanced
@@ -199,6 +155,7 @@ enamldef ADAPTForm(MainWindow):
         GroupBox: base:
             title = "Base transaction"
             enabled << len(bdb.url) > 0
+
             Container:
                 Form:
                     Label:
@@ -310,10 +267,3 @@ enamldef ADAPTForm(MainWindow):
                 MultilineField:
                     read_only = True
                     text << console_text.text
-
-
-
-
-                
-
-            

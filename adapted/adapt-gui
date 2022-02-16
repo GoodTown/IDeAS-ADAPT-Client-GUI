@@ -17,6 +17,8 @@
 import base64
 import datetime
 import email
+from operator import truediv
+import time
 import enaml
 import os
 import platform
@@ -211,8 +213,15 @@ class UserAuthentication(Atom):
     email = Str()
     password = Str()
     result = Str()
+    idToken = Str()
+    loggedin = Str()
+
+    def login(self):
+        self.loggedin = "True"
+        log(self.loggedin)
 
     def new_user(self):
+        log(self.email + self.password)
         if (self.email == "" or self.password == ""):
             self.result = "Please enter username and password"
         else:
@@ -245,6 +254,7 @@ class UserAuthentication(Atom):
             self.result = text
     
     def sign_in(self):
+        success = False
         if (self.email == "" or self.password == ""):
             self.result = "Please enter username and password"    
         else:
@@ -264,6 +274,10 @@ class UserAuthentication(Atom):
 
             elif status == 'success':
                 text = "Success!"
+                self.idToken = resultjson['idToken']
+                self.login()
+                success = True
+
             
             if  'message' in resultjson.keys():
                 
@@ -278,7 +292,7 @@ class UserAuthentication(Atom):
                 elif message == 'INVALID_PASSWORD':
                     text += " invalid password"
             self.result = text
-
+        return success
 
 
 
@@ -292,6 +306,9 @@ def log(s):
 if __name__ == '__main__':
     with enaml.imports():
         from ADAPTWindow import ADAPTForm
+
+    with enaml.imports():
+        from login_view import LoginView
         #from main_view import Main
 
     from enaml.qt.qt_application import QtApplication
@@ -301,7 +318,19 @@ if __name__ == '__main__':
     mnt = MountDetails()
     user = UserAuthentication()
     
-    view = ADAPTForm(user_auth=user, bdb=bdb, console_text=console, mount=mnt)
-    view.show()
+    view = ADAPTForm(bdb=bdb, console_text=console, mount=mnt)
+
+    loginview = LoginView(adapt = view, user_auth = user, console_text=console)
+    loginview.show()
 
     app.start()
+
+    '''while True:
+        if (user.idToken != ""):
+            loginview.close()
+            view.show()
+            print("logged in")
+            break'''
+
+
+

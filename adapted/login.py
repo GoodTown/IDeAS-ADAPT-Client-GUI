@@ -14,6 +14,9 @@ import enaml
 import firebase_authentication_api
 from enaml.qt.qt_application import QtApplication
 
+console = Console()
+
+auth = UserAuthentication()
 
 class Person(Atom):
     """ A simple class representing a person object.
@@ -164,9 +167,9 @@ def log(s):
     console.text += str(s)
     console.text += '\n'
 
-console = Console()
-auth = UserAuthentication()
-def main():
+
+
+"""def main():
 
 
     # Import our Enaml EmployeeView
@@ -182,4 +185,43 @@ def main():
     app.start()
 
 if __name__ == '__main__':
-    main()
+    main()"""
+
+        #title << "ADAPT login page"
+'''Container:
+        GroupBox: login_box:
+            share_layout = True
+            title = "Login Details"
+            Container: 
+                event sign_in_clicked
+                Label: 
+                    text << user_auth.result
+                Form:
+                    Label:
+                        text = "Username"
+
+                    Field: username:
+                        placeholder = "Email"
+                        text := user_auth.email
+
+                    Label:
+                        text = "Password"
+
+                    Field: password:
+                        placeholder = "Password"
+                        text := user_auth.password
+                        submit_triggers = ['lost_focus', 'return_pressed']
+                    
+                Container: log_buttons:
+
+                    PushButton: login:
+                        text = "Login"
+                        clicked :: sign_in_clicked()
+
+                    PushButton: newuser:
+                        text = "Create Account"
+                        clicked :: user_auth.new_user()
+                Container:
+                    MultilineField:
+                        read_only = True
+                        text << console_text.text'''
