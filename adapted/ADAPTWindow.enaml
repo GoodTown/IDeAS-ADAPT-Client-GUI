@@ -79,6 +79,9 @@ enamldef ADAPTForm(MainWindow):
 
     attr show_advanced = False
 
+    func sign_in_clicked():
+        user_auth.sign_in()
+
 
     func load_configuration(fn):
         #Load YAML data from a file and pass it to function fn.
@@ -125,12 +128,51 @@ enamldef ADAPTForm(MainWindow):
             text = "Advanced"
             checked := show_advanced
 
+    #title << "ADAPT login page"
+    Container:
+        GroupBox: login_box:
+            share_layout = True
+            title = "Login Details"
+            Container: 
+                event sign_in_clicked
+                Label: 
+                    text << user_auth.result
+                Form:
+                    Label:
+                        text = "Username"
+
+                    Field: username:
+                        placeholder = "Email"
+                        text := user_auth.email
+
+                    Label:
+                        text = "Password"
+
+                    Field: password:
+                        placeholder = "Password"
+                        text := user_auth.password
+                        submit_triggers = ['lost_focus', 'return_pressed']
+                    
+                Container: log_buttons:
+
+                    PushButton: login:
+                        text = "Login"
+                        clicked :: sign_in_clicked()
+
+                    PushButton: newuser:
+                        text = "Create Account"
+                        clicked :: user_auth.new_user()
+                Container:
+                    MultilineField:
+                        read_only = True
+                        text << console_text.text
     Container:
         constraints << [
             (vbox(sys, base, mount_details, new_trans, cons)
                 if show_advanced
                 else vbox(base, new_trans))
         ]
+        visible << False
         GroupBox: sys:
             title = "System parameters"
             visible << show_advanced
@@ -270,54 +312,8 @@ enamldef ADAPTForm(MainWindow):
                     text << console_text.text
 
 
-enamldef LoginForm(Form):
-    attr user_auth
-    attr console_text
-    attr show_adapt : bool = false
-    Container: 
-        Label: 
-            text << user_auth.result
-        Form:
-            Label:
-                text = "Username"
-
-            Field: username:
-                placeholder = "Email"
-                text := user_auth.email
-
-            Label:
-                text = "Password"
-
-            Field: password:
-                placeholder = "Password"
-                text := user_auth.password
-                submit_triggers = ['lost_focus', 'return_pressed']
-                    
-        Container: log_buttons:
-
-            PushButton: login:
-                text = "Login"
-                clicked :: user_auth.sign_in()
-
-            PushButton: newuser:
-                text = "Create Account"
-                clicked :: user_auth.new_user()
 
 
-enamldef LoginView(Window): main:
-    attr user_auth
-    attr console_text
-    title << "ADAPT login page"
-    Container:
-        GroupBox: login_box:
-            alias form: login_form
-            share_layout = True
-            title = "Login Details"
-            LoginForm: login_form:
-                share_layout = True
-                user_auth = main.user_auth
-                console_text = main.console_text
-            Container:
-                MultilineField:
-                    read_only = True
-                    text << console_text.text
+                
+
+            

@@ -206,24 +206,79 @@ class MountDetails(Atom):
             subprocess.run(['umount', self.mount_point])
             os.rmdir(self.mount_point)
 
+
 class UserAuthentication(Atom):
     email = Str()
     password = Str()
+    result = Str()
 
     def new_user(self):
-        if (self.email == "" and self.password == ""):
-            result = "Please enter username and password"
+        if (self.email == "" or self.password == ""):
+            self.result = "Please enter username and password"
         else:
-            result = firebase_authentication_api.new_user(self.email,self.password)
-        
-        log(result)
+            resultjson = firebase_authentication_api.new_user(self.email,self.password)
+
+            log(str(resultjson))
+
+            text = Str()
+
+            status = str(resultjson['status'])
+
+
+            if  status == 'error':
+                text = "Error:"
+
+            elif status == 'success':
+                text = "Success!"
+
+            if  'message' in resultjson.keys():
+
+                message = str(resultjson['message'])
+                
+                if  message == 'INVALID_EMAIL':
+                    text += " invalid email"
+                if message == 'EMAIL_EXISTS':
+                    text += " email already in use"
+                if 'WEAK_PASSWORD' in message:
+                    text += " Password should be at least 6 characters"
+
+            self.result = text
     
     def sign_in(self):
-        if (self.email == "" and self.password == ""):
-            result = "Please enter username and password"    
+        if (self.email == "" or self.password == ""):
+            self.result = "Please enter username and password"    
         else:
-            result = firebase_authentication_api.sign_in(self.email,self.password)
-        log(result)
+            resultjson = firebase_authentication_api.sign_in(self.email,self.password)
+
+            log(str(resultjson))
+
+            text = Str()
+
+            status = str(resultjson['status'])
+
+
+
+
+            if  status == 'error':
+                text = "Error:"
+
+            elif status == 'success':
+                text = "Success!"
+            
+            if  'message' in resultjson.keys():
+                
+                message = str(resultjson['message'])
+                
+                if  message == 'INVALID_EMAIL':
+                    text += " invalid email"
+            
+                elif message == 'EMAIL_NOT_FOUND':
+                    text += " email not found please sign up"
+
+                elif message == 'INVALID_PASSWORD':
+                    text += " invalid password"
+            self.result = text
+
 
 
 
@@ -236,7 +291,7 @@ def log(s):
 
 if __name__ == '__main__':
     with enaml.imports():
-        from login_view import lLoginView
+        from ADAPTWindow import ADAPTForm
         #from main_view import Main
 
     from enaml.qt.qt_application import QtApplication
@@ -246,7 +301,7 @@ if __name__ == '__main__':
     mnt = MountDetails()
     user = UserAuthentication()
     
-    view = Main(user_auth=user, bdb=bdb, console_text=console, mount=mnt)
+    view = ADAPTForm(user_auth=user, bdb=bdb, console_text=console, mount=mnt)
     view.show()
 
     app.start()
