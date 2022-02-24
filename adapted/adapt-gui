@@ -32,6 +32,11 @@ from atom.api import Atom, Str, observe
 from bigchaindb_driver import BigchainDB
 from enaml.application import deferred_call
 
+from  adapt_cli import AdaptServer
+from  user         import User
+import config as cfg
+from asset import Asset
+from audit import Audit
 
 class Console(Atom):
     """A place to hold textual messages.
@@ -39,7 +44,10 @@ class Console(Atom):
 
     text = Str()
 
-
+    def log(self,s):
+        self.text += str(s)
+        self.text += '\n'
+   
 class BDB(Atom):
     url = Str()
 
@@ -62,7 +70,7 @@ class BDB(Atom):
             print(result)
 
         except Exception as e:
-            log(f'Error committing transaction: {e}')
+            console.log(f'Error committing transaction: {e}')
             raise
 
 
@@ -75,7 +83,7 @@ class BDB(Atom):
             return txns[0]['asset']['data']['bp']
 
         except Exception as e:
-            log(f'Error retrieving BP from block {height}: {e}')
+            console.log(f'Error retrieving BP from block {height}: {e}')
             return ''
 
 
@@ -97,7 +105,7 @@ class MountDetails(Atom):
         try:
             self.mount()
         except Exception as e:
-            log('Error: ' + str(e))
+            console.log('Error: ' + str(e))
 
 
     def mount(self, bp=None, store=None):
@@ -118,17 +126,17 @@ class MountDetails(Atom):
         if not store:
             raise ValueError("No block store specified")
 
-        log(f"Mounting block pointer '{bp}'")
+        console.log(f"Mounting block pointer '{bp}'")
 
         #
         # Construct temporary metadata file and mount point
         #
         meta, filename = tempfile.mkstemp(prefix='upss', suffix='.meta')
         os.fdopen(meta, 'wb').write(base64.b64decode(bp))
-        log(f'Block pointer written to {filename}')
+        console.log(f'Block pointer written to {filename}')
 
         d = tempfile.mkdtemp(prefix='upss', suffix='.mnt')
-        log(f'Mount point: {d}')
+        console.log(f'Mount point: {d}')
 
         #
         # Call upss-fuse to mount the directory
@@ -152,7 +160,7 @@ class MountDetails(Atom):
         #
         try:
             outs, _ = p.communicate(timeout=.1)
-            log(outs.decode('ascii', 'backslashreplace'))
+            console.log(outs.decode('ascii', 'backslashreplace'))
 
         except subprocess.TimeoutExpired:
             pass
@@ -173,7 +181,7 @@ class MountDetails(Atom):
                 outs, _ = p.communicate(timeout=1)
 
                 # Use thread-safe signalling mechanism
-                deferred_call(log, outs.decode('ascii', 'backslashreplace'))
+                deferred_call(console.log, outs.decode('ascii', 'backslashreplace'))
                 deferred_call(setattr, self, 'mount_point', '')
 
                 new_pointer = base64.b64encode(open(meta_file, 'rb').read())
@@ -210,24 +218,24 @@ class MountDetails(Atom):
 
 
 class UserAuthentication(Atom):
-    email = Str()
-    password = Str()
+    email = "123123@gmail.com"
+    password = "123123"
     result = Str()
     idToken = Str()
     loggedin = Str()
 
     def login(self):
         self.loggedin = "True"
-        log(self.loggedin)
+        console.log(self.loggedin)
 
     def new_user(self):
-        log(self.email + self.password)
+        console.log(self.email + self.password)
         if (self.email == "" or self.password == ""):
             self.result = "Please enter username and password"
         else:
             resultjson = firebase_authentication_api.new_user(self.email,self.password)
 
-            log(str(resultjson))
+            console.log(str(resultjson))
 
             text = Str()
 
@@ -260,7 +268,7 @@ class UserAuthentication(Atom):
         else:
             resultjson = firebase_authentication_api.sign_in(self.email,self.password)
 
-            log(str(resultjson))
+            console.log(str(resultjson))
 
             text = Str()
 
@@ -293,15 +301,71 @@ class UserAuthentication(Atom):
                     text += " invalid password"
             self.result = text
         return success
+class AdaptInterface(Atom):
+    node = AdaptServer(cfg.node_addresses['dev'])
+    user = User("Foobar", "1234")
 
+    def __init__(self):
+        self.node.setDebug()
+        self.node.initKS()
+
+    def ingest(self, filepath):
+        asset = self.node.ingest(filepath,self.user)
+        result = AssetStr(str(asset.user), str(asset.hash), str(asset.tx_type), str(asset.id), str(asset.timestamp), str(asset.parent), str(asset.tags))
+        return(result)
+
+    def retrieve(self, tid):
+        asset = self.node.retrieve(tid,self.user)
+        result = AssetStr(str(asset.user), str(asset.hash), str(asset.tx_type), str(asset.id), str(asset.timestamp), str(asset.parent), str(asset.tags))
+        return(result)
+
+    def commit(self, filepath, tid):
+        asset = self.node.commit(filepath, tid, self.user)
+        result = AssetStr(str(asset.user), str(asset.hash), str(asset.tx_type), str(asset.id), str(asset.timestamp), str(asset.parent), str(asset.tags))
+        return(result)
+    
+    def backtrace(self,assetStr,title):
+        asset = self.node.retrieve(assetStr.id,self.user)
+        print("backtrace starts")
+        trace, tags = audit.backtrace(asset,title)
+        print("backtrace ends")
+        trace.write('back.txt')
+        console.log(str(trace))
+    
+    def foretrace(self,assetStr,title):
+        asset = self.node.retrieve(assetStr.id,self.user)
+        trace = audit.foretrace(asset,title)
+        trace.write('fore.txt')
+        console.log(str(trace))
+
+    def branchtrace(self,assetStr,title):
+        asset = self.node.retrieve(assetStr.id,self.user)
+        trace= audit.branchtrace(asset,title)
+        trace.write('branch.txt')
+        console.log(str(trace))
+
+
+class AssetStr():
+    user = str()
+    hash = str()
+    id = str()
+    tx_type = str()
+    timestamp = str()
+    prev = str()
+    tags = str()
+    def __init__(self,user,hash,tx_type,txid,timestamp,parent, tag):
+        self.user = user
+        self.hash = hash
+        self.tx_type = tx_type
+        self.id = txid
+        self.timestamp = timestamp
+        self.prev = parent
+        self.tag = tag
 
 
 
 console = Console()
-
-def log(s):
-    console.text += str(s)
-    console.text += '\n'
+audit = Audit('phil')
 
 if __name__ == '__main__':
     with enaml.imports():
@@ -316,21 +380,26 @@ if __name__ == '__main__':
 
     bdb = BDB()
     mnt = MountDetails()
-    user = UserAuthentication()
-    
-    view = ADAPTForm(bdb=bdb, console_text=console, mount=mnt)
+    user_auth = UserAuthentication()
+    asset = AssetStr(
+            "phil",
+            "",
+            "Put",
+            "",
+            "",
+            "",
+            ""
+        )
 
-    loginview = LoginView(adapt = view, user_auth = user, console_text=console)
+    adapt_interface = AdaptInterface()
+
+    view = ADAPTForm(asset=asset, adapt=adapt_interface, bdb=bdb, console_text=console, mount=mnt)
+
+    loginview = LoginView(adapt = view, user_auth = user_auth, console_text=console)
     loginview.show()
 
     app.start()
 
-    '''while True:
-        if (user.idToken != ""):
-            loginview.close()
-            view.show()
-            print("logged in")
-            break'''
 
 
 

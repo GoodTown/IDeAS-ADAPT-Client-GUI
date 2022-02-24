@@ -34,6 +34,7 @@ from enaml.widgets.api import (
     MultilineField,
     PushButton,
     ToolBar,
+    Field
 )
 
 from enaml.stdlib.message_box import critical
@@ -65,16 +66,68 @@ enamldef FileActions(ActionGroup):
         enabled << len(mount.mount_point) == 0
         triggered :: main.close()
 
+def gen_constraints(info, buttons, console, show_advanced,audit):
+    if not show_advanced:
+        return [vbox(info, buttons)]
+    return [vbox(info, buttons,audit,console)]
 
 enamldef ADAPTForm(MainWindow): main:
     title = "ADAPT Transaction"
-
+    initial_size = (800,600)
     attr bdb
     attr mount
     attr console_text
+
+    attr adapt
+    attr user
+    attr asset
+
     event check_out_bp
 
     attr show_advanced = False
+    attr filePath = "path"
+
+    attr tid = "please enter transaction id"
+
+    func ingest_click():
+        print("ingest begins")
+        main.asset = adapt.ingest(main.filePath)
+        main.tid = asset.id
+        print("transaction ID: "+main.asset.id)
+        print("ingest ends")
+
+    func retrieve_click():
+        print("retrieve begins")
+        main.asset = adapt.retrieve(tid)
+        main.tid = asset.id
+        print("retrieve ends")
+        #'''main.asset = adapt.retrieve(tidf.text,user)
+        #main.tid = main.asset.id
+        #console.text.append()'''
+
+    func commit_click():
+        print("commit begins")
+        main.asset = adapt.commit(main.filePath, tid)
+        main.tid = asset.id
+        print("commit ends")
+        #'''main.asset = adapt.commit(main.filePath, tidf.text, user)
+        #main.tid = main.asset.id'''
+
+    func backtrace_click():
+        adapt.backtrace(main.asset,None)
+
+    func foretrace_click():
+        adapt.foretrace(main.asset,None)
+
+    func branchtrace_click():
+        adapt.branchtrace(main.asset,None)
+
+    func open_file_dialog():
+        
+        path = FileDialogEx.get_open_file_name()
+        l = path.split('/')
+        #console_text.text = l[-1]
+        main.filePath = l[-1]
 
 
     func load_configuration(fn):
@@ -106,6 +159,7 @@ enamldef ADAPTForm(MainWindow): main:
         base_height.text = str(data['block'])
 
 
+
     MenuBar:
         Menu:
             title = '&File'
@@ -123,13 +177,98 @@ enamldef ADAPTForm(MainWindow): main:
             checked := show_advanced
 
     Container:
-        constraints << [
-            (vbox(sys, base, mount_details, new_trans, cons)
-                if show_advanced
-                else vbox(base, new_trans))
-        ]
+        constraints << gen_constraints(info, buttons,cons, show_advanced,audit)
+        GroupBox: info:
+            title = "Asset information"
+            Container:
+                Form:
+                    Label: pubkeyl:
+                        text = "User"
+                    Field: pubkeyf:
+                        text << str(main.asset.user)
+                        read_only = True
+                    Label: hashl:
+                        text = "Hash"
+                    Field: hashf:
+                        text << main.asset.hash
+                        read_only = True
+                    Label: actionl:
+                        text = "Action"
+                    Field: acationf:
+                        text << main.asset.tx_type
+                        read_only = True
+                    Label: timestampl:
+                        text = "Timestamp"
+                    Field: timestampf:
+                        text << str(main.asset.timestamp)
+                        read_only = True
+                    Label: idl:
+                        text = "Transaction ID"
+                    Field: idf:
+                        text << main.asset.id
+                        read_only = True
+                    Label: prevl:
+                        text = "Previous Transaction ID"
+                    Field: prevf:
+                        text << main.asset.prev
+                        read_only = True
+                    Label: tagsl:
+                        text = "Tags"
+                    Field: tagsf:
+                        text = str(main.asset.tags)
+                        read_only = True
+        GroupBox: buttons:
+            title = "Action"
+            constraints = [hbox(action,system)]
+            Container: action: 
+                constraints = [vbox(ingest, commit,tidf, retrieve)] #desc
+                PushButton: ingest:
+                    text = "Ingest"
+                    #enabled << len(descrip.text) > 0
+                    clicked ::ingest_click()
+                    #bdb.commit(new_pointer.text,base_height.text,pub.text,priv.text)
+                Field: tidf:
+                    text := tid
+                PushButton: retrieve:
+                    text = "Retrieve"
+                    enabled << len(tid) > 0
+                    clicked:: retrieve_click()
+                PushButton: commit:
+                    text = "Commit"
+                    enabled << len(tid) > 0
+                    clicked:: commit_click()
 
-        GroupBox: sys:
+            Container: system:
+                constraints = [vbox(pathl,fileLocation)]
+                Label: pathl:
+                    text << main.filePath
+                PushButton: fileLocation:
+                    text = "File Location..."
+                    clicked :: open_file_dialog()
+        GroupBox: audit:
+            title = "Auditing"
+            visible << show_advanced
+            Container:
+                PushButton: backtrace:
+                    text = "BackTrace"
+                    clicked:: backtrace_click()
+                PushButton: foretrace:
+                    text = "ForeTrace"
+                    clicked:: foretrace_click()
+                PushButton: branchtrace:
+                    text = "BranchTrace"
+                    clicked:: branchtrace_click()
+        GroupBox: cons:
+            title = "Console"
+            visible << False
+            Container:
+                MultilineField:
+                    read_only = True
+                    text << console_text.text
+
+
+
+'''GroupBox: sys:
             title = "System parameters"
             visible << show_advanced
 
@@ -150,9 +289,8 @@ enamldef ADAPTForm(MainWindow): main:
                     Field: store:
                         placeholder = "/path/to/upss.store"
                         text := mount.store
-                        submit_triggers = ['lost_focus', 'return_pressed']
-
-        GroupBox: base:
+                        submit_triggers = ['lost_focus', 'return_pressed']'''
+'''GroupBox: base:
             title = "Base transaction"
             enabled << len(bdb.url) > 0
 
@@ -202,68 +340,34 @@ enamldef ADAPTForm(MainWindow): main:
                         clicked :: mount.open_mounted_directory()
 
                     PushButton: unmount:
-                        text = "Unmount"
-                        clicked :: mount.unmount()
+                        text = "Unmount" 
+                        clicked :: mount.unmount()'''
 
-        GroupBox: new_trans:
-            title = "New transaction"
-            enabled << len(bdb.url) > 0 and len(new_pointer.text) > 0
+'''Form: desc:
+                    Label:
+                        text = "Description"
 
-            Container:
-                constraints = [
-                    vbox(hbox(tx_details, user_image), desc, commit),
-                    user_image.height <= tx_details.height,
-                ]
+                    MultilineField: descrip:
+                        text = ""'''
 
-                Form: tx_details:
+'''Form: tx_details:
                     Label:
                         text = "Block pointer"
 
                     Field: new_pointer:
                         placeholder = "QlABQiIAAAAAAAABjg..."
                         text := mount.new_pointer
-
-                    Container:
-                        visible << show_advanced
-                        Form:
-                            Label:
-                                text = "Public key"
-
-                            Field: pub:
-                                placeholder = "Decoded Ed25519 public key"
-
-                            Label:
-                                text = "Private key"
-
-                            Field: priv:
-                                placeholder = "Decoded Ed25519 private key"
-
-                ImageView: user_image:
-                    scale_to_fit = True
-                    preserve_aspect_ratio = True
-
-                Form: desc:
                     Label:
-                        text = "Description"
+                        text = "Public key"
 
-                    MultilineField: descrip:
-                        text = ""
+                    Field: pub:
+                        placeholder = "Decoded Ed25519 public key"
 
-                PushButton: commit:
-                    text = "Commit"
-                    enabled << len(descrip.text) > 0
-                    clicked::
-                        bdb.commit(new_pointer.text,
-                                   base_height.text,
-                                   pub.text,
-                                   priv.text)
+                    Label:
+                        text = "Private key"
 
-        GroupBox: cons:
-            title = "Console"
-            name = "console"
-            visible << show_advanced
-
-            Container:
-                MultilineField:
-                    read_only = True
-                    text << console_text.text
+                    Field: priv:
+                        placeholder = "Decoded Ed25519 private key"
+                    ImageView: user_image:
+                        scale_to_fit = True
+                        preserve_aspect_ratio = True'''

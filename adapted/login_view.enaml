@@ -33,14 +33,12 @@ enamldef LoginView(Window): loginWindow:
     attr console_text
     attr success : bool = false
     attr adapt
+    
     func sign_in_clicked():
         success = user_auth.sign_in()
         if success:
             adapt.show()
             loginWindow.close()
-
-            
-
 
     #event sign_in_clicked
 
